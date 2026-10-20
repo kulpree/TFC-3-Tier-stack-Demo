@@ -1,0 +1,54 @@
+name: Terraform Stacks – Local 3-Tier App
+
+on:
+  push:
+    branches: [main, staging]
+  pull_request:
+    branches: [main]
+
+env:
+  TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
+  TF_CLOUD_ORGANIZATION: "kulpree-demo"
+  STACK_NAME: "three-tier-stack"
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          cli_config_credentials_token: ${{ env.TF_API_TOKEN }}
+      - run: terraform init
+      - if: github.event_name == 'pull_request'
+        run: terraform plan -input=false
+
+  apply-dev:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: plan
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/terraform-cloud-action/apply@v1
+        with:
+          token: ${{ env.TF_API_TOKEN }}
+          organization: ${{ env.TF_CLOUD_ORGANIZATION }}
+          stack: ${{ env.STACK_NAME }}
+          deployment: dev
+          auto_approve: true
+
+  apply-staging:
+    if: github.ref == 'refs/heads/staging' && github.event_name == 'push'
+    needs: plan
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/terraform-cloud-action/apply@v1
+        with:
+          token: ${{ env.TF_API_TOKEN }}
+          organization: ${{ env.TF_CLOUD_ORGANIZATION }}
+          stack: ${{ env.TF_STACK_NAME }}
+          deployment: staging
+          auto_approve: true
