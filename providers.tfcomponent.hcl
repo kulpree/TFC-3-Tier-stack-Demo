@@ -1,3 +1,12 @@
-# The agent pod carries a ServiceAccount with cluster-admin; the Kubernetes
-# provider auto-detects in-cluster configuration, so no config_path is needed.
-provider "kubernetes" "this" {}
+required_providers {
+  kubernetes = {
+    source  = "hashicorp/kubernetes"
+    version = "~> 2.0" # Use a recent version compatible with your Stack
+  }
+}
+
+provider "kubernetes" "this" {
+  # Configuration is handled via the in-cluster service account
+  # No explicit config block is needed if using in-cluster config.
+  config {}
+}
