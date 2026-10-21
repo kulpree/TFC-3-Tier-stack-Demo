@@ -8,5 +8,6 @@ required_providers {
 provider "kubernetes" "this" {
   # Configuration is handled via the in-cluster service account
   # No explicit config block is needed if using in-cluster config.
+  # This is just to test
   config {}
 }
