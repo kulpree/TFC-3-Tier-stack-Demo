@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#
+# Testing my changes
 # setup-3tier-stacks-local.sh
 #
 # Deploys a three-tier sample app on a local kind Kubernetes cluster using
