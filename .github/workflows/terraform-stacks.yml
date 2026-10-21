@@ -47,50 +47,30 @@ jobs:
       - name: Trigger Staging Stack Deployment
         env:
           TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
-          HCP_ORG: "kulpree-demo"                # <-- replace with your org
-          STACK_NAME: "three-tier-stack"         # <-- replace with your Stack name
-          DEPLOYMENT_NAME: "staging"             # must match the deployment block name
+          HCP_ORG: "your-org"
+          STACK_NAME: "three-tier-stack"
+          DEPLOYMENT_NAME: "staging"
         run: |
           set -euo pipefail
+          API="https://app.terraform.io/api/v2"
+          AUTH=(-H "Authorization: Bearer ${TF_API_TOKEN}" -H "Content-Type: application/vnd.api+json")
 
-          echo "🔍 Resolving Stack ID for '${STACK_NAME}'..."
-          STACK_ID=$(curl -sS \
-            -H "Authorization: Bearer ${TF_API_TOKEN}" \
-            -H "Content-Type: application/vnd.api+json" \
-            "https://app.terraform.io/api/v2/organizations/${HCP_ORG}/stacks?filter%5Bname%5D=${STACK_NAME}" \
-            | jq -r '.data[0].id')
+          STACK_ID=$(curl -sS "${AUTH[@]}" \
+            "${API}/organizations/${HCP_ORG}/stacks?filter%5Bname%5D=${STACK_NAME}" \
+            | jq -r '.data[0].id // empty')
+          [[ -n "${STACK_ID}" ]] || { echo "Stack not found"; exit 1; }
 
-          if [[ -z "${STACK_ID}" || "${STACK_ID}" == "null" ]]; then
-            echo "❌ Could not find Stack '${STACK_NAME}' in organization '${HCP_ORG}'."
-            exit 1
-          fi
-          echo "✅ Stack ID: ${STACK_ID}"
+          STACK_CONFIG_ID=$(curl -sS "${AUTH[@]}" "${API}/stacks/${STACK_ID}" \
+            | jq -r '.data.relationships["latest-stack-configuration"].data.id // empty')
+          [[ -n "${STACK_CONFIG_ID}" ]] || { echo "No configuration yet"; exit 1; }
 
-          echo "🔍 Resolving deployment group ID for '${DEPLOYMENT_NAME}'..."
-          DEPLOYMENT_GROUP_ID=$(curl -sS \
-            -H "Authorization: Bearer ${TF_API_TOKEN}" \
-            -H "Content-Type: application/vnd.api+json" \
-            "https://app.terraform.io/api/v2/stacks/${STACK_ID}/stack-deployments" \
-            | jq -r --arg name "${DEPLOYMENT_NAME}" '.data[] | select(.attributes.name == $name) | .relationships["stack-deployment-group"].data.id')
+          DEPLOYMENT_GROUP_ID=$(curl -sS "${AUTH[@]}" \
+            "${API}/stack-configurations/${STACK_CONFIG_ID}/stack-deployment-groups/${DEPLOYMENT_NAME}_default" \
+            | jq -r '.data.id // empty')
+          [[ -n "${DEPLOYMENT_GROUP_ID}" ]] || { echo "Deployment group not found"; exit 1; }
 
-          if [[ -z "${DEPLOYMENT_GROUP_ID}" || "${DEPLOYMENT_GROUP_ID}" == "null" ]]; then
-            echo "❌ Could not find deployment group '${DEPLOYMENT_NAME}' for Stack '${STACK_NAME}'."
-            exit 1
-          fi
-          echo "✅ Deployment group ID: ${DEPLOYMENT_GROUP_ID}"
-
-          echo "🚀 Triggering rerun of deployment group '${DEPLOYMENT_NAME}'..."
-          HTTP_STATUS=$(curl -sS -o /tmp/rerun-response.json -w "%{http_code}" \
-            -X POST \
-            -H "Authorization: Bearer ${TF_API_TOKEN}" \
-            -H "Content-Type: application/vnd.api+json" \
-            "https://app.terraform.io/api/v2/stack-deployment-groups/${DEPLOYMENT_GROUP_ID}/rerun")
-
-          if [[ "${HTTP_STATUS}" != "202" && "${HTTP_STATUS}" != "200" ]]; then
-            echo "❌ Failed to trigger rerun. HTTP status: ${HTTP_STATUS}"
-            cat /tmp/rerun-response.json
-            exit 1
-          fi
-
-          echo "✅ Deployment group rerun triggered successfully."
-          cat /tmp/rerun-response.json | jq .
+          STATUS=$(curl -sS -o /tmp/rerun.json -w "%{http_code}" \
+            -X POST "${AUTH[@]}" \
+            "${API}/stack-deployment-groups/${DEPLOYMENT_GROUP_ID}/rerun")
+          [[ "${STATUS}" =~ ^(200|202)$ ]] || { cat /tmp/rerun.json; exit 1; }
+          echo "✅ Rerun triggered (HTTP ${STATUS})"
