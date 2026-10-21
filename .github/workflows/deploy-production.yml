@@ -1,17 +1,35 @@
 name: Deploy Production Stack
 
 on:
-  workflow_dispatch:
-
-env:
-  TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
-  PROD_STACK_ID: ${{ secrets.PROD_STACK_ID }}
+  push:
+    branches:
+      - prod
 
 jobs:
-  trigger-production:
+  deploy:
     runs-on: ubuntu-latest
+    environment: production
     steps:
-      - name: Fetch latest configuration from VCS
+      - name: Checkout only production-stack
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            production-stack
+          sparse-checkout-cone-mode: false
+          fetch-depth: 1
+
+      - name: Show what was checked out
+        run: |
+          echo "Workspace contents:"
+          ls -la
+          echo "---"
+          echo "production-stack contents:"
+          ls -la production-stack
+
+      - name: Trigger HCP Terraform Stack Run
+        env:
+          TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
+          PROD_STACK_ID: ${{ secrets.PROD_STACK_ID }}
         run: |
           curl -sS -X POST \
             -H "Authorization: Bearer ${TF_API_TOKEN}" \
