@@ -17,11 +17,21 @@ component "backend" {
 }
 
 component "database" {
-  source  = "./modules/database"
-  inputs  = { namespace = var.environment }
+  source    = "./modules/database"
+  inputs    = { namespace = var.environment }
   providers = { kubernetes = provider.kubernetes.this }
 }
 
-variable "environment"       { type = string }
-variable "frontend_replicas" { type = number, default = 1 }
-variable "backend_replicas"  { type = number, default = 1 }
+variable "environment" {
+  type = string
+}
+
+variable "frontend_replicas" {
+  type    = number
+  default = 1
+}
+
+variable "backend_replicas" {
+  type    = number
+  default = 1
+}

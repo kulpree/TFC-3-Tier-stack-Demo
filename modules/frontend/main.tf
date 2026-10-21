@@ -1,8 +1,10 @@
 variable "namespace" { type = string }
-variable "replicas"  { type = number }
+variable "replicas" { type = number }
 
 resource "kubernetes_namespace" "frontend" {
-  metadata { name = var.namespace }
+  metadata {
+    name = var.namespace
+  }
 }
 
 resource "kubernetes_deployment" "frontend" {
@@ -13,14 +15,20 @@ resource "kubernetes_deployment" "frontend" {
   }
   spec {
     replicas = var.replicas
-    selector { match_labels = { app = "frontend" } }
+    selector {
+      match_labels = { app = "frontend" }
+    }
     template {
-      metadata { labels = { app = "frontend" } }
+      metadata {
+        labels = { app = "frontend" }
+      }
       spec {
         container {
           name  = "nginx"
           image = "nginx:alpine"
-          port { container_port = 80 }
+          port {
+            container_port = 80
+          }
         }
       }
     }
@@ -34,7 +42,10 @@ resource "kubernetes_service" "frontend" {
   }
   spec {
     selector = { app = "frontend" }
-    port { port = 80, target_port = 80 }
+    port {
+      port        = 80
+      target_port = 80
+    }
     type = "ClusterIP"
   }
 }
