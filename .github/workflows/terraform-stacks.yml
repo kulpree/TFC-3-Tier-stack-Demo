@@ -44,11 +44,57 @@ jobs:
     runs-on: ubuntu-latest
     environment: staging
     steps:
-      - uses: actions/checkout@v4
-      - uses: hashicorp/terraform-cloud-action/apply@v1
-        with:
-          token: ${{ env.TF_API_TOKEN }}
-          organization: ${{ env.TF_CLOUD_ORGANIZATION }}
-          stack: ${{ env.TF_STACK_NAME }}
-          deployment: staging
-          auto_approve: true
+      - name: Trigger or Skip Staging Deployment
+        env:
+          TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
+          HCP_ORG: "kulpree-demo"
+          STACK_NAME: "three-tier-stack"
+          DEPLOYMENT_NAME: "staging"
+        run: |
+          set -euo pipefail
+          API="https://app.terraform.io/api/v2"
+          AUTH=(-H "Authorization: Bearer ${TF_API_TOKEN}" -H "Content-Type: application/vnd.api+json")
+
+          # 1) Resolve Stack ID — list all stacks and filter by name locally
+          STACK_ID=$(curl -sS "${AUTH[@]}" \
+            "${API}/organizations/${HCP_ORG}/stacks" \
+            | jq -r --arg name "${STACK_NAME}" \
+              '.data[] | select(.attributes.name == $name) | .id // empty')
+          [[ -n "${STACK_ID}" ]] || { echo "Stack '${STACK_NAME}' not found"; exit 1; }
+          echo "STACK_ID=${STACK_ID}"
+
+          # 2) Resolve latest configuration ID
+          STACK_CONFIG_ID=$(curl -sS "${AUTH[@]}" "${API}/stacks/${STACK_ID}" \
+            | jq -r '.data.relationships["latest-stack-configuration"].data.id // empty')
+          [[ -n "${STACK_CONFIG_ID}" ]] || { echo "No configuration yet"; exit 1; }
+          echo "STACK_CONFIG_ID=${STACK_CONFIG_ID}"
+
+          # 3) Resolve deployment group ID
+          DEPLOYMENT_GROUP_ID=$(curl -sS "${AUTH[@]}" \
+            "${API}/stack-configurations/${STACK_CONFIG_ID}/stack-deployment-groups/${DEPLOYMENT_NAME}_default" \
+            | jq -r '.data.id // empty')
+          [[ -n "${DEPLOYMENT_GROUP_ID}" ]] || { echo "Deployment group not found"; exit 1; }
+          echo "DEPLOYMENT_GROUP_ID=${DEPLOYMENT_GROUP_ID}"
+
+          # 4) Fetch the deployment group's current status
+          GROUP_JSON=$(curl -sS "${AUTH[@]}" \
+            "${API}/stack-deployment-groups/${DEPLOYMENT_GROUP_ID}")
+          GROUP_STATUS=$(echo "${GROUP_JSON}" | jq -r '.data.attributes.status // empty')
+          echo "Current group status: ${GROUP_STATUS}"
+
+          # 5) Only rerun if status is failed, canceled, or abandoned
+          if [[ "${GROUP_STATUS}" =~ ^(failed|canceled|abandoned)$ ]]; then
+            echo "Status is '${GROUP_STATUS}'. Attempting rerun..."
+            STATUS=$(curl -sS -o /tmp/rerun.json -w "%{http_code}" \
+              -X POST "${AUTH[@]}" \
+              "${API}/stack-deployment-groups/${DEPLOYMENT_GROUP_ID}/rerun")
+            if [[ "${STATUS}" =~ ^(200|202)$ ]]; then
+              echo "✅ Rerun triggered successfully (HTTP ${STATUS})."
+            else
+              echo "❌ Rerun failed (HTTP ${STATUS})."
+              cat /tmp/rerun.json | jq .
+              exit 1
+            fi
+          else
+            echo "✅ Deployment group is '${GROUP_STATUS}' — no rerun needed."
+          fi
