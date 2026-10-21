@@ -1003,7 +1003,7 @@ rm -rf ~/.config/three-tier-stacks
 
 ---
 
-## 🎯 The One-Slide Takeaway
+## 🎯 The One-Slide Takeaway - Nice
 
 > **HCP VCS** gives you push-to-deploy for the primary branch.
 > **GitHub Actions** gives you programmatic control to promote to other environments.
