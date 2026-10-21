@@ -47,7 +47,7 @@ jobs:
       - name: Trigger Staging Stack Deployment
         env:
           TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
-          HCP_ORG: "your-org"
+          HCP_ORG: "kulpree-demo"
           STACK_NAME: "three-tier-stack"
           DEPLOYMENT_NAME: "staging"
         run: |
